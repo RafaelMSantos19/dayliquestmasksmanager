@@ -27,6 +27,7 @@ import { RewardsTab } from './components/RewardsTab';
 import { HistoryTab } from './components/HistoryTab';
 import { CreateQuestModal } from './components/CreateQuestModal';
 import { CelebrationModal } from './components/CelebrationModal';
+import { AuthErrorModal } from './components/AuthErrorModal';
 import { Sparkles, Trophy, CheckCircle, ShieldAlert, CloudCheck } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import {
@@ -720,6 +721,9 @@ export default function App() {
           level={celebrationLevel || 1}
           onClose={() => setCelebrationLevel(null)}
         />
+
+        {/* Auth Error & Domain Diagnostic Modal */}
+        <AuthErrorModal />
 
         {/* Floating Toast Notification */}
         {floatingToast && (

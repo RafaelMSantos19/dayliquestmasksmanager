@@ -16,11 +16,11 @@ export default defineConfig(() => {
           id: '/',
           name: 'QuestLog RPG - Gerenciador de Tarefas',
           short_name: 'QuestLog',
-          description: 'Transforme suas tarefas diárias em quests épicas de RPG com atributos, ouro, níveis e recompensas no iOS.',
+          description: 'Transforme suas tarefas diárias em quests épicas de RPG com atributos, ouro, níveis, remédios e sincronização na nuvem para iOS, Android, Windows e Linux.',
           theme_color: '#090514',
           background_color: '#05020a',
           display: 'standalone',
-          orientation: 'portrait',
+          orientation: 'any',
           start_url: '/',
           scope: '/',
           icons: [
