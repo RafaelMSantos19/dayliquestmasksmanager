@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+  }
+
+  body {
+    background-color: #000000;
+    color: #ffffff;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  h1, h2, h3, .font-rpg {
+    font-family: 'Cinzel', serif, system-ui;
+    letter-spacing: 0.03em;
+  }
+}
+
+/* iOS Safe Areas */
+.pt-safe {
+  padding-top: max(16px, env(safe-area-inset-top, 16px));
+}
+
+.pb-safe {
+  padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
+}
+
+.pb-safe-nav {
+  padding-bottom: max(84px, calc(env(safe-area-inset-bottom, 16px) + 68px));
+}
+
+/* Custom Purple Glow & RPG Borders */
+.border-purple-rpg {
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  box-shadow: 0 0 15px -3px rgba(168, 85, 247, 0.15);
+}
+
+.border-purple-rpg-bright {
+  border: 1px solid rgba(192, 132, 252, 0.7);
+  box-shadow: 0 0 20px -2px rgba(168, 85, 247, 0.35);
+}
+
+.glow-purple-text {
+  text-shadow: 0 0 10px rgba(192, 132, 252, 0.6);
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3b0764;
+  border-radius: 9999px;
+  border: 1px solid #7e22ce;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b21a8;
+}

@@ -1,0 +1,6 @@
+{
+  "name": "QuestLog RPG - Gerenciador de Tarefas",
+  "description": "Transforme suas tarefas diárias em quests épicas de RPG com atributos, ouro, níveis e recompensas no iOS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
