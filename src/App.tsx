@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   CharacterProfile,
   Quest,
@@ -27,9 +27,21 @@ import { RewardsTab } from './components/RewardsTab';
 import { HistoryTab } from './components/HistoryTab';
 import { CreateQuestModal } from './components/CreateQuestModal';
 import { CelebrationModal } from './components/CelebrationModal';
-import { Sparkles, Trophy, CheckCircle, ShieldAlert } from 'lucide-react';
+import { Sparkles, Trophy, CheckCircle, ShieldAlert, CloudCheck } from 'lucide-react';
+import { useAuth } from './context/AuthContext';
+import {
+  fetchUserDataFromFirestore,
+  saveProfileToFirestore,
+  saveQuestToFirestore,
+  deleteQuestFromFirestore,
+  saveRewardToFirestore,
+  deleteRewardFromFirestore,
+  saveHistoryItemToFirestore,
+  bootstrapUserCloudData,
+} from './services/firestoreSync';
 
 export default function App() {
+  const { currentUser } = useAuth();
   const [profile, setProfile] = useState<CharacterProfile>(loadProfile);
   const [quests, setQuests] = useState<Quest[]>(loadQuests);
   const [rewards, setRewards] = useState<ShopReward[]>(loadRewards);
@@ -41,12 +53,74 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(sound.enabled);
   const [floatingToast, setFloatingToast] = useState<{ message: string; sub?: string } | null>(null);
 
+  const cloudInitialLoaded = useRef(false);
+
   const showNotification = (message: string, sub?: string) => {
     setFloatingToast({ message, sub });
     setTimeout(() => {
       setFloatingToast((curr) => (curr?.message === message ? null : curr));
     }, 2800);
   };
+
+  // Cloud synchronization when user logs in or out
+  useEffect(() => {
+    if (!currentUser) {
+      cloudInitialLoaded.current = false;
+      return;
+    }
+
+    let isMounted = true;
+    fetchUserDataFromFirestore(currentUser.uid)
+      .then(async (cloudData) => {
+        if (!isMounted) return;
+
+        if (cloudData && (cloudData.profile || cloudData.quests.length > 0)) {
+          // Cloud data exists: populate local state from Firestore
+          if (cloudData.profile) {
+            setProfile(cloudData.profile);
+            saveProfile(cloudData.profile);
+          }
+          if (cloudData.quests && cloudData.quests.length > 0) {
+            setQuests(cloudData.quests);
+            saveQuests(cloudData.quests);
+          }
+          if (cloudData.rewards && cloudData.rewards.length > 0) {
+            setRewards(cloudData.rewards);
+            saveRewards(cloudData.rewards);
+          }
+          if (cloudData.history) {
+            setHistory(cloudData.history);
+            saveHistory(cloudData.history);
+          }
+          showNotification(
+            '☁️ Grimório Sincronizado!',
+            `Bem-vindo, ${currentUser.displayName?.split(' ')[0] || 'Aventureiro'}! Seus dados foram carregados.`
+          );
+        } else {
+          // New cloud user: bootstrap their cloud document with existing local state
+          const personalizedProfile: CharacterProfile = {
+            ...profile,
+            name: profile.name === 'Aventureiro' && currentUser.displayName
+              ? currentUser.displayName.split(' ')[0]
+              : profile.name,
+          };
+          setProfile(personalizedProfile);
+          await bootstrapUserCloudData(currentUser.uid, personalizedProfile, quests, rewards, history);
+          showNotification(
+            '⚔️ Progresso Salvo na Nuvem!',
+            'Seu herói agora está conectado à sua conta Google e acessível em qualquer dispositivo.'
+          );
+        }
+        cloudInitialLoaded.current = true;
+      })
+      .catch((err) => {
+        console.error('Failed to sync cloud data:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser?.uid]);
 
   // Day transition checker (Midnight, iOS wake-up, tab visibility)
   useEffect(() => {
@@ -65,12 +139,24 @@ export default function App() {
               '🌅 Um Novo Dia Despertou!',
               'Suas missões diárias e doses de poções foram renovadas!'
             );
+
+            // Sync reset quests to cloud if logged in
+            if (currentUser) {
+              result.updatedQuests.forEach((q) => {
+                if (q.category === 'daily' || q.recurring) {
+                  saveQuestToFirestore(currentUser.uid, q);
+                }
+              });
+            }
             return result.updatedQuests;
           }
           return prevQuests;
         });
 
         const res = checkAndApplyDayTransition([], prevProf, today);
+        if (currentUser) {
+          saveProfileToFirestore(currentUser.uid, res.updatedProfile);
+        }
         return res.updatedProfile;
       });
     };
@@ -78,7 +164,7 @@ export default function App() {
     // 1. Run check immediately on mount
     evaluateDayChange();
 
-    // 2. Run whenever user returns to the app / unlocks iPhone Safari
+    // 2. Run whenever user returns to the app / unlocks device
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         evaluateDayChange();
@@ -96,9 +182,9 @@ export default function App() {
       window.removeEventListener('focus', evaluateDayChange);
       clearInterval(interval);
     };
-  }, []);
+  }, [currentUser]);
 
-  // Auto-save state to localStorage
+  // Auto-save state to localStorage (offline caching)
   useEffect(() => {
     saveProfile(profile);
   }, [profile]);
@@ -154,11 +240,14 @@ export default function App() {
 
     if (targetQuest.completed) {
       // Reopening quest: toggle off completed
-      setQuests(
-        quests.map((q) =>
-          q.id === questId ? { ...q, completed: false, completedAt: undefined } : q
-        )
+      const updated = quests.map((q) =>
+        q.id === questId ? { ...q, completed: false, completedAt: undefined } : q
       );
+      setQuests(updated);
+      const reverted = updated.find((q) => q.id === questId);
+      if (reverted && currentUser) {
+        saveQuestToFirestore(currentUser.uid, reverted);
+      }
       showNotification('Missão reaberta', targetQuest.title);
       return;
     }
@@ -179,6 +268,11 @@ export default function App() {
         : q
     );
     setQuests(updatedQuests);
+
+    const completedQuest = updatedQuests.find((q) => q.id === questId);
+    if (completedQuest && currentUser) {
+      saveQuestToFirestore(currentUser.uid, completedQuest);
+    }
 
     // Update character XP, Gold, Stats
     const xpGained = targetQuest.xpReward;
@@ -218,16 +312,20 @@ export default function App() {
         totalGoldEarned: prev.totalGoldEarned + goldGained,
         totalQuestsCompleted: totalCompleted,
         attributes: updatedAttributes,
-        hp: prev.maxHp, // small heal on success
+        hp: prev.maxHp, // heal on quest victory
         badges: prev.badges,
       };
 
-      // Check level 5 badge
       if (level >= 5 && !newProf.badges.includes('level_5')) {
         newProf.badges.push('level_5');
       }
 
       newProf.badges = checkBadges(newProf, totalCompleted, targetQuest);
+
+      if (currentUser) {
+        saveProfileToFirestore(currentUser.uid, newProf);
+      }
+
       return newProf;
     });
 
@@ -243,6 +341,10 @@ export default function App() {
     };
     setHistory((prev) => [historyItem, ...prev]);
 
+    if (currentUser) {
+      saveHistoryItemToFirestore(currentUser.uid, historyItem);
+    }
+
     showNotification(
       `+${xpGained} XP · +${goldGained} Ouro`,
       `Atributo ${statAffinity.toUpperCase()} aumentou!`
@@ -251,24 +353,33 @@ export default function App() {
 
   // Toggle single subtask
   const handleToggleSubtask = (questId: string, subtaskId: string) => {
-    setQuests(
-      quests.map((q) => {
+    let questToSave: Quest | null = null;
+
+    setQuests((prevQuests) => {
+      const updated = prevQuests.map((q) => {
         if (q.id === questId) {
           const updatedSubs = q.subtasks.map((st) =>
             st.id === subtaskId ? { ...st, done: !st.done } : st
           );
-          // If all subtasks are done, auto-suggest completion
           const allDone = updatedSubs.length > 0 && updatedSubs.every((st) => st.done);
-          return {
+          const modifiedQuest: Quest = {
             ...q,
             subtasks: updatedSubs,
             completed: allDone ? true : q.completed,
             completedAt: allDone ? new Date().toISOString() : q.completedAt,
           };
+          questToSave = modifiedQuest;
+          return modifiedQuest;
         }
         return q;
-      })
-    );
+      });
+
+      if (questToSave && currentUser) {
+        saveQuestToFirestore(currentUser.uid, questToSave);
+      }
+
+      return updated;
+    });
   };
 
   // Take single periodic medication dose
@@ -276,9 +387,10 @@ export default function App() {
     let doseTime = '';
     let isAllDosesTakenNow = false;
     let targetQuestTitle = '';
+    let questToSave: Quest | null = null;
 
-    setQuests((prevQuests) =>
-      prevQuests.map((q) => {
+    setQuests((prevQuests) => {
+      const updated = prevQuests.map((q) => {
         if (q.id === questId && q.medicationPlan) {
           targetQuestTitle = q.title;
           const updatedDoses = q.medicationPlan.doses.map((d) => {
@@ -295,7 +407,7 @@ export default function App() {
 
           isAllDosesTakenNow = updatedDoses.every((d) => d.taken);
 
-          return {
+          const modifiedQuest: Quest = {
             ...q,
             completed: isAllDosesTakenNow,
             completedAt: isAllDosesTakenNow ? new Date().toISOString() : q.completedAt,
@@ -304,23 +416,37 @@ export default function App() {
               doses: updatedDoses,
             },
           };
+          questToSave = modifiedQuest;
+          return modifiedQuest;
         }
         return q;
-      })
-    );
+      });
+
+      if (questToSave && currentUser) {
+        saveQuestToFirestore(currentUser.uid, questToSave);
+      }
+
+      return updated;
+    });
 
     // Boost Vitality, XP and HP for taking the medicine
     sound.playPotion();
-    setProfile((prev) => ({
-      ...prev,
-      currentXp: prev.currentXp + 15,
-      gold: prev.gold + 5,
-      hp: Math.min(prev.maxHp, prev.hp + 20), // Healing potion effect
-      attributes: {
-        ...prev.attributes,
-        vit: prev.attributes.vit + 1, // Boost Vitalidade
-      },
-    }));
+    setProfile((prev) => {
+      const updated: CharacterProfile = {
+        ...prev,
+        currentXp: prev.currentXp + 15,
+        gold: prev.gold + 5,
+        hp: Math.min(prev.maxHp, prev.hp + 20), // Healing potion effect
+        attributes: {
+          ...prev.attributes,
+          vit: prev.attributes.vit + 1, // Boost Vitalidade
+        },
+      };
+      if (currentUser) {
+        saveProfileToFirestore(currentUser.uid, updated);
+      }
+      return updated;
+    });
 
     if (isAllDosesTakenNow) {
       sound.playQuestComplete();
@@ -345,12 +471,18 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
     setQuests([newQuest, ...quests]);
+    if (currentUser) {
+      saveQuestToFirestore(currentUser.uid, newQuest);
+    }
     showNotification('Missão registrada no Grimório!', newQuest.title);
   };
 
   // Delete quest
   const handleDeleteQuest = (questId: string) => {
     setQuests(quests.filter((q) => q.id !== questId));
+    if (currentUser) {
+      deleteQuestFromFirestore(currentUser.uid, questId);
+    }
     showNotification('Missão removida do quadro');
   };
 
@@ -361,16 +493,24 @@ export default function App() {
 
     if (profile.gold < reward.cost) return;
 
-    setProfile((prev) => ({
-      ...prev,
-      gold: prev.gold - reward.cost,
-    }));
+    const newProfile = {
+      ...profile,
+      gold: profile.gold - reward.cost,
+    };
+    setProfile(newProfile);
+    if (currentUser) {
+      saveProfileToFirestore(currentUser.uid, newProfile);
+    }
 
+    const updatedReward = { ...reward, redeemedCount: reward.redeemedCount + 1 };
     setRewards(
       rewards.map((r) =>
-        r.id === rewardId ? { ...r, redeemedCount: r.redeemedCount + 1 } : r
+        r.id === rewardId ? updatedReward : r
       )
     );
+    if (currentUser) {
+      saveRewardToFirestore(currentUser.uid, updatedReward);
+    }
 
     showNotification(`Recompensa Resgatada: ${reward.title}`, `-${reward.cost} Ouro consumido. Aproveite!`);
   };
@@ -383,12 +523,18 @@ export default function App() {
       redeemedCount: 0,
     };
     setRewards([...rewards, newReward]);
+    if (currentUser) {
+      saveRewardToFirestore(currentUser.uid, newReward);
+    }
     showNotification('Nova recompensa cadastrada!', newReward.title);
   };
 
   // Delete reward
   const handleDeleteReward = (rewardId: string) => {
     setRewards(rewards.filter((r) => r.id !== rewardId));
+    if (currentUser) {
+      deleteRewardFromFirestore(currentUser.uid, rewardId);
+    }
   };
 
   // Sound toggle
@@ -399,29 +545,37 @@ export default function App() {
 
   // Reset dailies
   const handleResetDailies = () => {
-    setQuests((prev) =>
-      prev.map((q) => {
+    const updated = quests.map((q) => {
+      if (q.category === 'daily' || q.recurring) {
+        return {
+          ...q,
+          completed: false,
+          completedAt: undefined,
+          subtasks: q.subtasks.map((st) => ({ ...st, done: false })),
+          medicationPlan: q.medicationPlan
+            ? {
+                ...q.medicationPlan,
+                doses: q.medicationPlan.doses.map((d) => ({
+                  ...d,
+                  taken: false,
+                  takenAt: undefined,
+                })),
+              }
+            : undefined,
+        };
+      }
+      return q;
+    });
+
+    setQuests(updated);
+    if (currentUser) {
+      updated.forEach((q) => {
         if (q.category === 'daily' || q.recurring) {
-          return {
-            ...q,
-            completed: false,
-            completedAt: undefined,
-            subtasks: q.subtasks.map((st) => ({ ...st, done: false })),
-            medicationPlan: q.medicationPlan
-              ? {
-                  ...q.medicationPlan,
-                  doses: q.medicationPlan.doses.map((d) => ({
-                    ...d,
-                    taken: false,
-                    takenAt: undefined,
-                  })),
-                }
-              : undefined,
-          };
+          saveQuestToFirestore(currentUser.uid, q);
         }
-        return q;
-      })
-    );
+      });
+    }
+
     sound.playClick();
     showNotification(
       'Novo Dia Iniciado!',
@@ -457,6 +611,16 @@ export default function App() {
         setQuests(data.quests);
         if (data.rewards) setRewards(data.rewards);
         if (data.history) setHistory(data.history);
+
+        if (currentUser) {
+          bootstrapUserCloudData(
+            currentUser.uid,
+            data.profile,
+            data.quests,
+            data.rewards || rewards,
+            data.history || history
+          );
+        }
         showNotification('Dados restaurados com êxito!');
       } else {
         alert('Formato de backup inválido.');
@@ -466,11 +630,21 @@ export default function App() {
     }
   };
 
+  const handleUpdateProfile = (updated: Partial<CharacterProfile>) => {
+    setProfile((prev) => {
+      const updatedProfile = { ...prev, ...updated };
+      if (currentUser) {
+        saveProfileToFirestore(currentUser.uid, updatedProfile);
+      }
+      return updatedProfile;
+    });
+  };
+
   const pendingDailies = quests.filter((q) => q.category === 'daily' && !q.completed).length;
 
   return (
     <div className="min-h-screen bg-black text-white flex justify-center selection:bg-purple-600 selection:text-white">
-      {/* Responsive viewport frame for mobile, tablet (Android/iPad), and desktop (Windows/Linux) */}
+      {/* Responsive viewport frame for mobile (iOS/Android) and desktop/tablets (Windows/Linux/iPad) */}
       <div className="w-full max-w-6xl min-h-screen bg-black border-x border-purple-950/40 flex flex-col relative shadow-[0_0_60px_rgba(147,51,234,0.12)]">
         {/* Character Status & Responsive Navigation */}
         <CharacterHeader
@@ -500,7 +674,7 @@ export default function App() {
           {activeTab === 'hero' && (
             <HeroSheetTab
               profile={profile}
-              onUpdateProfile={(updated) => setProfile((p) => ({ ...p, ...updated }))}
+              onUpdateProfile={handleUpdateProfile}
               onResetDailies={handleResetDailies}
               onExportData={handleExportData}
               onImportData={handleImportData}
@@ -525,7 +699,7 @@ export default function App() {
           )}
         </main>
 
-        {/* Bottom Tab Bar for iOS */}
+        {/* Bottom Tab Bar for Mobile Navigation */}
         <BottomNav
           activeTab={activeTab}
           onChangeTab={setActiveTab}

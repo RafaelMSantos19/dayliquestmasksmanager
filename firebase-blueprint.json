@@ -1,0 +1,99 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Dados do perfil do herói e atributos RPG do usuário",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "characterClass": { "type": "string", "maxLength": 100 },
+        "level": { "type": "number" },
+        "currentXp": { "type": "number" },
+        "hp": { "type": "number" },
+        "maxHp": { "type": "number" },
+        "mana": { "type": "number" },
+        "maxMana": { "type": "number" },
+        "gold": { "type": "number" },
+        "streak": { "type": "number" },
+        "lastActiveDate": { "type": "string", "maxLength": 50 },
+        "totalQuestsCompleted": { "type": "number" },
+        "totalGoldEarned": { "type": "number" },
+        "badges": { "type": "array" },
+        "attributes": { "type": "object" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "level", "currentXp", "gold", "streak"]
+    },
+    "QuestItem": {
+      "title": "QuestItem",
+      "description": "Missão de RPG diária, principal, secundária ou receita médica",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "category": { "type": "string", "maxLength": 50 },
+        "difficulty": { "type": "string", "maxLength": 10 },
+        "statAffinity": { "type": "string", "maxLength": 20 },
+        "xpReward": { "type": "number" },
+        "goldReward": { "type": "number" },
+        "completed": { "type": "boolean" },
+        "completedAt": { "type": "string", "maxLength": 100 },
+        "dueDate": { "type": "string", "maxLength": 100 },
+        "recurring": { "type": "boolean" },
+        "subtasks": { "type": "array" },
+        "medicationPlan": { "type": "object" },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "title", "category", "difficulty", "statAffinity", "xpReward", "goldReward", "completed"]
+    },
+    "ShopRewardItem": {
+      "title": "ShopRewardItem",
+      "description": "Recompensa da vida real ou RPG comprável com moedas de ouro",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "cost": { "type": "number" },
+        "icon": { "type": "string", "maxLength": 50 },
+        "redeemedCount": { "type": "number" },
+        "category": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "title", "cost", "icon", "redeemedCount"]
+    },
+    "HistoryItem": {
+      "title": "HistoryItem",
+      "description": "Registro de missão concluída com sucesso no grimório",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "questTitle": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 50 },
+        "xpEarned": { "type": "number" },
+        "goldEarned": { "type": "number" },
+        "statAffinity": { "type": "string", "maxLength": 20 },
+        "completedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "questTitle", "xpEarned", "goldEarned", "completedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Perfil e atributos RPG exclusivos do usuário autenticado"
+    },
+    "/users/{userId}/quests/{questId}": {
+      "schema": { "$ref": "#/entities/QuestItem" },
+      "description": "Missões e receitas do usuário autenticado"
+    },
+    "/users/{userId}/rewards/{rewardId}": {
+      "schema": { "$ref": "#/entities/ShopRewardItem" },
+      "description": "Recompensas personalizadas do usuário"
+    },
+    "/users/{userId}/history/{historyId}": {
+      "schema": { "$ref": "#/entities/HistoryItem" },
+      "description": "Histórico de missões cumpridas do usuário"
+    }
+  }
+}

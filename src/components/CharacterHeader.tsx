@@ -2,6 +2,7 @@ import React from 'react';
 import { CharacterProfile } from '../types/rpg';
 import { getRequiredXpForLevel } from '../utils/storage';
 import { PWAInstallButton } from './PWAInstallButton';
+import { UserAuthBadge } from './UserAuthBadge';
 import { TabType } from './BottomNav';
 import { Volume2, VolumeX, Flame, Coins, Heart, Plus, Sword, Shield, ShoppingBag, BookOpen } from 'lucide-react';
 import { sound } from '../utils/audio';
@@ -61,6 +62,7 @@ export const CharacterHeader: React.FC<Props> = ({
 
           {/* Mobile Right Quick Controls */}
           <div className="flex items-center gap-2 md:hidden">
+            <UserAuthBadge />
             <PWAInstallButton />
             <button
               onClick={onToggleSound}
@@ -164,6 +166,7 @@ export const CharacterHeader: React.FC<Props> = ({
           )}
 
           <PWAInstallButton />
+          <UserAuthBadge />
 
           <button
             onClick={onToggleSound}
