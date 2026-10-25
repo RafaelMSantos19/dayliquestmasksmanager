@@ -5,7 +5,7 @@ import {
   collection,
   getDocs,
   deleteDoc,
-  writeBatch,
+  onSnapshot,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { CharacterProfile, Quest, ShopReward } from '../types/rpg';
@@ -17,38 +17,50 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<{
   rewards: ShopReward[];
   history: QuestLogHistoryItem[];
 } | null> {
-  const userDocRef = doc(db, 'users', userId);
   try {
-    const userDocSnap = await getDoc(userDocRef);
-    if (!userDocSnap.exists()) {
-      return null;
-    }
-
-    const profileData = userDocSnap.data() as CharacterProfile;
-
-    // Fetch quests
+    const userDocRef = doc(db, 'users', userId);
     const questsCol = collection(db, 'users', userId, 'quests');
-    const questsSnap = await getDocs(questsCol);
+    const rewardsCol = collection(db, 'users', userId, 'rewards');
+    const historyCol = collection(db, 'users', userId, 'history');
+
+    const [userDocSnap, questsSnap, rewardsSnap, historySnap] = await Promise.all([
+      getDoc(userDocRef),
+      getDocs(questsCol),
+      getDocs(rewardsCol),
+      getDocs(historyCol),
+    ]);
+
+    const profileData = userDocSnap.exists() ? (userDocSnap.data() as CharacterProfile) : null;
+
     const quests: Quest[] = [];
     questsSnap.forEach((d) => {
       quests.push(d.data() as Quest);
     });
+    quests.sort((a, b) => {
+      const timeA = new Date(a.createdAt || 0).getTime();
+      const timeB = new Date(b.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
 
-    // Fetch rewards
-    const rewardsCol = collection(db, 'users', userId, 'rewards');
-    const rewardsSnap = await getDocs(rewardsCol);
     const rewards: ShopReward[] = [];
     rewardsSnap.forEach((d) => {
       rewards.push(d.data() as ShopReward);
     });
 
-    // Fetch history
-    const historyCol = collection(db, 'users', userId, 'history');
-    const historySnap = await getDocs(historyCol);
     const history: QuestLogHistoryItem[] = [];
     historySnap.forEach((d) => {
       history.push(d.data() as QuestLogHistoryItem);
     });
+    history.sort((a, b) => {
+      const timeA = new Date(a.completedAt || 0).getTime();
+      const timeB = new Date(b.completedAt || 0).getTime();
+      return timeB - timeA;
+    });
+
+    // If no remote data exists at all, return null so initial bootstrap can run
+    if (!profileData && quests.length === 0 && rewards.length === 0 && history.length === 0) {
+      return null;
+    }
 
     return {
       profile: profileData,
@@ -60,6 +72,92 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<{
     handleFirestoreError(error, OperationType.GET, `users/${userId}`);
     return null;
   }
+}
+
+export function subscribeToUserCloudData(
+  userId: string,
+  callbacks: {
+    onProfileChange?: (profile: CharacterProfile) => void;
+    onQuestsChange?: (quests: Quest[]) => void;
+    onRewardsChange?: (rewards: ShopReward[]) => void;
+    onHistoryChange?: (history: QuestLogHistoryItem[]) => void;
+  }
+): () => void {
+  const userDocRef = doc(db, 'users', userId);
+  const questsCol = collection(db, 'users', userId, 'quests');
+  const rewardsCol = collection(db, 'users', userId, 'rewards');
+  const historyCol = collection(db, 'users', userId, 'history');
+
+  const unsubProfile = onSnapshot(
+    userDocRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        callbacks.onProfileChange?.(snapshot.data() as CharacterProfile);
+      }
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.GET, `users/${userId}`);
+    }
+  );
+
+  const unsubQuests = onSnapshot(
+    questsCol,
+    (snapshot) => {
+      const quests: Quest[] = [];
+      snapshot.forEach((d) => {
+        quests.push(d.data() as Quest);
+      });
+      quests.sort((a, b) => {
+        const timeA = new Date(a.createdAt || 0).getTime();
+        const timeB = new Date(b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
+      callbacks.onQuestsChange?.(quests);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.GET, `users/${userId}/quests`);
+    }
+  );
+
+  const unsubRewards = onSnapshot(
+    rewardsCol,
+    (snapshot) => {
+      const rewards: ShopReward[] = [];
+      snapshot.forEach((d) => {
+        rewards.push(d.data() as ShopReward);
+      });
+      callbacks.onRewardsChange?.(rewards);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.GET, `users/${userId}/rewards`);
+    }
+  );
+
+  const unsubHistory = onSnapshot(
+    historyCol,
+    (snapshot) => {
+      const history: QuestLogHistoryItem[] = [];
+      snapshot.forEach((d) => {
+        history.push(d.data() as QuestLogHistoryItem);
+      });
+      history.sort((a, b) => {
+        const timeA = new Date(a.completedAt || 0).getTime();
+        const timeB = new Date(b.completedAt || 0).getTime();
+        return timeB - timeA;
+      });
+      callbacks.onHistoryChange?.(history);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.GET, `users/${userId}/history`);
+    }
+  );
+
+  return () => {
+    unsubProfile();
+    unsubQuests();
+    unsubRewards();
+    unsubHistory();
+  };
 }
 
 export async function saveProfileToFirestore(userId: string, profile: CharacterProfile) {
@@ -142,3 +240,4 @@ export async function bootstrapUserCloudData(
     console.error('Error bootstrapping cloud data:', err);
   }
 }
+

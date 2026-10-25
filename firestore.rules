@@ -20,22 +20,25 @@ service cloud.firestore {
 
     // User profile document
     match /users/{userId} {
-      allow get, write: if isOwner(userId);
+      allow get, write: if isOwner(userId) && isValidId(userId);
       allow list: if isOwner(userId);
 
       // Quests subcollection
       match /quests/{questId} {
-        allow read, write: if isOwner(userId) && isValidId(questId);
+        allow get, create, update, delete: if isOwner(userId) && isValidId(questId);
+        allow list: if isOwner(userId);
       }
 
       // Rewards subcollection
       match /rewards/{rewardId} {
-        allow read, write: if isOwner(userId) && isValidId(rewardId);
+        allow get, create, update, delete: if isOwner(userId) && isValidId(rewardId);
+        allow list: if isOwner(userId);
       }
 
       // History subcollection
       match /history/{historyId} {
-        allow read, write: if isOwner(userId) && isValidId(historyId);
+        allow get, create, update, delete: if isOwner(userId) && isValidId(historyId);
+        allow list: if isOwner(userId);
       }
     }
   }

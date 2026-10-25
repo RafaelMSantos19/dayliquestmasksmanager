@@ -32,6 +32,7 @@ import { Sparkles, Trophy, CheckCircle, ShieldAlert, CloudCheck } from 'lucide-r
 import { useAuth } from './context/AuthContext';
 import {
   fetchUserDataFromFirestore,
+  subscribeToUserCloudData,
   saveProfileToFirestore,
   saveQuestToFirestore,
   deleteQuestFromFirestore,
@@ -63,7 +64,7 @@ export default function App() {
     }, 2800);
   };
 
-  // Cloud synchronization when user logs in or out
+  // Cloud synchronization & real-time updates when user is logged in
   useEffect(() => {
     if (!currentUser) {
       cloudInitialLoaded.current = false;
@@ -71,6 +72,8 @@ export default function App() {
     }
 
     let isMounted = true;
+    let unsubscribeSync: (() => void) | null = null;
+
     fetchUserDataFromFirestore(currentUser.uid)
       .then(async (cloudData) => {
         if (!isMounted) return;
@@ -89,13 +92,13 @@ export default function App() {
             setRewards(cloudData.rewards);
             saveRewards(cloudData.rewards);
           }
-          if (cloudData.history) {
+          if (cloudData.history && cloudData.history.length > 0) {
             setHistory(cloudData.history);
             saveHistory(cloudData.history);
           }
           showNotification(
             '☁️ Grimório Sincronizado!',
-            `Bem-vindo, ${currentUser.displayName?.split(' ')[0] || 'Aventureiro'}! Seus dados foram carregados.`
+            `Conectado! Seus dados foram carregados da nuvem.`
           );
         } else {
           // New cloud user: bootstrap their cloud document with existing local state
@@ -113,6 +116,36 @@ export default function App() {
           );
         }
         cloudInitialLoaded.current = true;
+
+        // Establish real-time bi-directional Firestore listener across all devices
+        if (isMounted) {
+          unsubscribeSync = subscribeToUserCloudData(currentUser.uid, {
+            onProfileChange: (remoteProfile) => {
+              if (isMounted) {
+                setProfile(remoteProfile);
+                saveProfile(remoteProfile);
+              }
+            },
+            onQuestsChange: (remoteQuests) => {
+              if (isMounted) {
+                setQuests(remoteQuests);
+                saveQuests(remoteQuests);
+              }
+            },
+            onRewardsChange: (remoteRewards) => {
+              if (isMounted) {
+                setRewards(remoteRewards);
+                saveRewards(remoteRewards);
+              }
+            },
+            onHistoryChange: (remoteHistory) => {
+              if (isMounted) {
+                setHistory(remoteHistory);
+                saveHistory(remoteHistory);
+              }
+            },
+          });
+        }
       })
       .catch((err) => {
         console.error('Failed to sync cloud data:', err);
@@ -120,6 +153,9 @@ export default function App() {
 
     return () => {
       isMounted = false;
+      if (unsubscribeSync) {
+        unsubscribeSync();
+      }
     };
   }, [currentUser?.uid]);
 
@@ -471,7 +507,7 @@ export default function App() {
       completed: false,
       createdAt: new Date().toISOString(),
     };
-    setQuests([newQuest, ...quests]);
+    setQuests((prev) => [newQuest, ...prev.filter((q) => q.id !== newQuest.id)]);
     if (currentUser) {
       saveQuestToFirestore(currentUser.uid, newQuest);
     }
