@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
-import { Download, Share, PlusSquare, X, Smartphone, Sparkles, Check } from 'lucide-react';
+import { Download, Share, PlusSquare, X, Smartphone, Sparkles } from 'lucide-react';
 import { sound } from '../utils/audio';
 
 export const PWAInstallButton: React.FC = () => {
@@ -44,8 +44,27 @@ export const PWAInstallButton: React.FC = () => {
         </button>
 
         {showIOSGuide && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
-            <div className="relative w-full max-w-sm my-auto max-h-[90dvh] flex flex-col rounded-2xl bg-[#0d0718] border-2 border-purple-500/80 p-4 sm:p-5 shadow-[0_0_35px_rgba(168,85,247,0.4)] text-white">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-hidden animate-in fade-in duration-200"
+            style={{
+              height: '100dvh',
+              width: '100vw',
+              paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))',
+              paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))',
+              paddingLeft: 'max(0.75rem, env(safe-area-inset-left, 0px))',
+              paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                sound.playClick();
+                setShowIOSGuide(false);
+              }
+            }}
+          >
+            <div
+              className="relative w-full max-w-[340px] sm:max-w-sm max-h-[80dvh] flex flex-col rounded-2xl bg-[#0d0718] border-2 border-purple-500/80 p-4 sm:p-5 shadow-[0_0_35px_rgba(168,85,247,0.45)] text-white overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
               {/* Close Button */}
               <button
                 onClick={() => {
@@ -59,18 +78,22 @@ export const PWAInstallButton: React.FC = () => {
               </button>
 
               {/* Header */}
-              <div className="flex items-center gap-2.5 pr-8 mb-2">
+              <div className="flex items-center gap-2.5 pr-8 mb-3 shrink-0">
                 <div className="w-8 h-8 rounded-lg bg-purple-900/80 border border-purple-400 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(168,85,247,0.3)]">
                   <Sparkles className="w-4 h-4 text-purple-200" />
                 </div>
                 <div>
-                  <h3 className="font-rpg text-sm sm:text-base font-bold text-white tracking-wide">Instalar no iPhone / iPad</h3>
-                  <p className="text-[10px] sm:text-[11px] text-purple-300">Modo tela cheia sem barra de navegador</p>
+                  <h3 className="font-rpg text-sm sm:text-base font-bold text-white tracking-wide leading-tight">
+                    Instalar no iPhone / iPad
+                  </h3>
+                  <p className="text-[10px] sm:text-[11px] text-purple-300">
+                    Modo tela cheia sem barra de navegador
+                  </p>
                 </div>
               </div>
 
               {/* Scrollable instructions list */}
-              <div className="space-y-2.5 my-2.5 text-xs text-slate-200 overflow-y-auto max-h-[55dvh] pr-0.5 overscroll-contain">
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-2 py-1 pr-1 overscroll-contain text-xs text-slate-200">
                 <div className="flex items-start gap-2.5 p-2 sm:p-2.5 rounded-xl bg-purple-950/50 border border-purple-800/60">
                   <div className="flex h-6 w-6 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-lg bg-purple-800 text-purple-200 font-bold text-xs">
                     1
@@ -114,15 +137,15 @@ export const PWAInstallButton: React.FC = () => {
                   sound.playClick();
                   setShowIOSGuide(false);
                 }}
-                className="w-full mt-1 py-2 sm:py-2.5 rounded-xl border border-purple-500 bg-gradient-to-r from-purple-700 to-purple-900 text-white font-semibold text-xs tracking-wide hover:brightness-110 active:scale-98 transition shadow-[0_0_15px_rgba(168,85,247,0.3)] shrink-0"
+                className="w-full mt-3 py-2.5 rounded-xl border border-purple-500 bg-gradient-to-r from-purple-700 to-purple-900 text-white font-semibold text-xs tracking-wide hover:brightness-110 active:scale-98 transition shadow-[0_0_15px_rgba(168,85,247,0.3)] shrink-0"
               >
                 Entendi, vamos lá!
               </button>
             </div>
           </div>
         )}
-    </>
-  );
+      </>
+    );
   }
 
   return null;

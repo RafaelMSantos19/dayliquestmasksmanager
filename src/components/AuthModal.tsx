@@ -99,8 +99,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md my-auto max-h-[92dvh] flex flex-col rounded-2xl bg-[#0c051a] border-2 border-purple-500/80 p-5 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.45)] text-white overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-hidden animate-in fade-in duration-200"
+      style={{
+        height: '100dvh',
+        width: '100vw',
+        paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))',
+        paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))',
+        paddingLeft: 'max(0.75rem, env(safe-area-inset-left, 0px))',
+        paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          sound.playClick();
+          onClose();
+        }
+      }}
+    >
+      <div
+        className="relative w-full max-w-md max-h-[85dvh] flex flex-col rounded-2xl bg-[#0c051a] border-2 border-purple-500/80 p-5 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.45)] text-white overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Close Button */}
         <button
           onClick={() => {
