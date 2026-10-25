@@ -32,8 +32,8 @@ export const AuthErrorModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg rounded-2xl bg-[#0d041c] border-2 border-purple-500 p-5 sm:p-6 shadow-[0_0_40px_rgba(168,85,247,0.4)] text-white space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
+      <div className="relative w-full max-w-lg my-auto max-h-[90dvh] overflow-y-auto flex flex-col rounded-2xl bg-[#0d041c] border-2 border-purple-500 p-4 sm:p-6 shadow-[0_0_40px_rgba(168,85,247,0.4)] text-white space-y-4">
         {/* Close Button */}
         <button
           onClick={() => {
@@ -47,7 +47,7 @@ export const AuthErrorModal: React.FC = () => {
         </button>
 
         {/* Modal Header */}
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-3 pr-6">
           <div className="w-10 h-10 rounded-xl bg-purple-950 border border-purple-400 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(168,85,247,0.3)]">
             <ShieldAlert className="w-5 h-5 text-amber-400" />
           </div>
@@ -116,13 +116,13 @@ export const AuthErrorModal: React.FC = () => {
           <div className="p-3.5 rounded-xl bg-black/80 border border-purple-800/80 text-xs space-y-2.5">
             <div className="flex items-center gap-2 text-amber-300 font-semibold">
               <Smartphone className="w-4 h-4 text-purple-400" />
-              <span>Dica para Tablets e Aplicativos Instalados (PWA):</span>
+              <span>Dica para Dispositivos Móveis e iPhone PWA:</span>
             </div>
             <p className="text-purple-200 leading-relaxed text-[11px]">
-              Em tablets e quando o app está instalado na tela inicial, navegadores (como Safari e Chrome) muitas vezes fecham janelas popup automaticamente por restrições do sistema operacional.
+              No iPhone instalado na Tela de Início (PWA), a Apple abre o login do Google em uma aba do Safari e não sincroniza a sessão de volta por restrição do sistema.
             </p>
-            <p className="text-purple-200 leading-relaxed text-[11px]">
-              O modo de <strong>Redirecionamento Direto</strong> autentica diretamente na mesma aba sem depender de janelas popups.
+            <p className="text-amber-300 font-semibold leading-relaxed text-[11px]">
+              💡 Recomendação: Feche este aviso e use o botão "Entrar" com <strong>E-mail e Senha</strong> para fazer login diretamente aqui no app sem sair da tela!
             </p>
           </div>
         )}
