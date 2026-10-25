@@ -133,9 +133,9 @@ export const CreateQuestModal: React.FC<Props> = ({ isOpen, onClose, onCreate })
         isMedication: true,
         medicineName: medName.trim() || 'Remédio / Prescrição',
         dosage: medDosage.trim() || '1 dose',
-        instructions: medInstructions.trim() || undefined,
+        instructions: medInstructions.trim() || '',
         intervalHours,
-        durationDays: durationDays > 0 ? durationDays : undefined,
+        durationDays: durationDays > 0 ? durationDays : 0,
         currentDay: 1,
         startDate: new Date().toISOString().split('T')[0],
         doses,
@@ -169,7 +169,7 @@ export const CreateQuestModal: React.FC<Props> = ({ isOpen, onClose, onCreate })
 
       onCreate({
         title: title.trim(),
-        description: description.trim() || undefined,
+        description: description.trim() || '',
         category,
         difficulty,
         statAffinity,

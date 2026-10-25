@@ -11,6 +11,30 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { CharacterProfile, Quest, ShopReward } from '../types/rpg';
 import { QuestLogHistoryItem } from '../utils/storage';
 
+/**
+ * Deeply sanitizes objects before passing them to Firestore.
+ * Removes any keys with `undefined` values and ensures nested structures
+ * (such as medication plans, dose arrays, subtasks) are 100% Firestore-safe.
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === undefined) {
+    return null as unknown as T;
+  }
+  if (data === null || typeof data !== 'object') {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+  const clean: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+    if (value !== undefined) {
+      clean[key] = sanitizeForFirestore(value);
+    }
+  }
+  return clean as T;
+}
+
 export async function fetchUserDataFromFirestore(userId: string): Promise<{
   profile: CharacterProfile | null;
   quests: Quest[];
@@ -34,7 +58,10 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<{
 
     const quests: Quest[] = [];
     questsSnap.forEach((d) => {
-      quests.push(d.data() as Quest);
+      const q = d.data() as Quest;
+      if (q && q.id) {
+        quests.push(q);
+      }
     });
     quests.sort((a, b) => {
       const timeA = new Date(a.createdAt || 0).getTime();
@@ -44,12 +71,18 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<{
 
     const rewards: ShopReward[] = [];
     rewardsSnap.forEach((d) => {
-      rewards.push(d.data() as ShopReward);
+      const r = d.data() as ShopReward;
+      if (r && r.id) {
+        rewards.push(r);
+      }
     });
 
     const history: QuestLogHistoryItem[] = [];
     historySnap.forEach((d) => {
-      history.push(d.data() as QuestLogHistoryItem);
+      const h = d.data() as QuestLogHistoryItem;
+      if (h && h.id) {
+        history.push(h);
+      }
     });
     history.sort((a, b) => {
       const timeA = new Date(a.completedAt || 0).getTime();
@@ -69,7 +102,7 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<{
       history,
     };
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, `users/${userId}`);
+    console.warn('Could not fetch user data from Firestore:', error);
     return null;
   }
 }
@@ -81,6 +114,7 @@ export function subscribeToUserCloudData(
     onQuestsChange?: (quests: Quest[]) => void;
     onRewardsChange?: (rewards: ShopReward[]) => void;
     onHistoryChange?: (history: QuestLogHistoryItem[]) => void;
+    onError?: (error: unknown) => void;
   }
 ): () => void {
   const userDocRef = doc(db, 'users', userId);
@@ -96,7 +130,8 @@ export function subscribeToUserCloudData(
       }
     },
     (err) => {
-      handleFirestoreError(err, OperationType.GET, `users/${userId}`);
+      console.warn('Profile snapshot subscription warning:', err);
+      callbacks.onError?.(err);
     }
   );
 
@@ -105,7 +140,10 @@ export function subscribeToUserCloudData(
     (snapshot) => {
       const quests: Quest[] = [];
       snapshot.forEach((d) => {
-        quests.push(d.data() as Quest);
+        const q = d.data() as Quest;
+        if (q && q.id) {
+          quests.push(q);
+        }
       });
       quests.sort((a, b) => {
         const timeA = new Date(a.createdAt || 0).getTime();
@@ -115,7 +153,8 @@ export function subscribeToUserCloudData(
       callbacks.onQuestsChange?.(quests);
     },
     (err) => {
-      handleFirestoreError(err, OperationType.GET, `users/${userId}/quests`);
+      console.warn('Quests snapshot subscription warning:', err);
+      callbacks.onError?.(err);
     }
   );
 
@@ -124,12 +163,16 @@ export function subscribeToUserCloudData(
     (snapshot) => {
       const rewards: ShopReward[] = [];
       snapshot.forEach((d) => {
-        rewards.push(d.data() as ShopReward);
+        const r = d.data() as ShopReward;
+        if (r && r.id) {
+          rewards.push(r);
+        }
       });
       callbacks.onRewardsChange?.(rewards);
     },
     (err) => {
-      handleFirestoreError(err, OperationType.GET, `users/${userId}/rewards`);
+      console.warn('Rewards snapshot subscription warning:', err);
+      callbacks.onError?.(err);
     }
   );
 
@@ -138,7 +181,10 @@ export function subscribeToUserCloudData(
     (snapshot) => {
       const history: QuestLogHistoryItem[] = [];
       snapshot.forEach((d) => {
-        history.push(d.data() as QuestLogHistoryItem);
+        const h = d.data() as QuestLogHistoryItem;
+        if (h && h.id) {
+          history.push(h);
+        }
       });
       history.sort((a, b) => {
         const timeA = new Date(a.completedAt || 0).getTime();
@@ -148,7 +194,8 @@ export function subscribeToUserCloudData(
       callbacks.onHistoryChange?.(history);
     },
     (err) => {
-      handleFirestoreError(err, OperationType.GET, `users/${userId}/history`);
+      console.warn('History snapshot subscription warning:', err);
+      callbacks.onError?.(err);
     }
   );
 
@@ -160,60 +207,76 @@ export function subscribeToUserCloudData(
   };
 }
 
-export async function saveProfileToFirestore(userId: string, profile: CharacterProfile) {
+export async function saveProfileToFirestore(userId: string, profile: CharacterProfile): Promise<boolean> {
   const path = `users/${userId}`;
   try {
-    await setDoc(doc(db, 'users', userId), {
+    const cleanProfile = sanitizeForFirestore({
       ...profile,
       updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    });
+    await setDoc(doc(db, 'users', userId), cleanProfile, { merge: true });
+    return true;
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.error('Failed to save profile to Firestore:', error);
+    return false;
   }
 }
 
-export async function saveQuestToFirestore(userId: string, quest: Quest) {
+export async function saveQuestToFirestore(userId: string, quest: Quest): Promise<boolean> {
   const path = `users/${userId}/quests/${quest.id}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'quests', quest.id), quest, { merge: true });
+    const cleanQuest = sanitizeForFirestore(quest);
+    await setDoc(doc(db, 'users', userId, 'quests', quest.id), cleanQuest, { merge: true });
+    return true;
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.error(`Failed to save quest ${quest.id} to Firestore:`, error);
+    return false;
   }
 }
 
-export async function deleteQuestFromFirestore(userId: string, questId: string) {
+export async function deleteQuestFromFirestore(userId: string, questId: string): Promise<boolean> {
   const path = `users/${userId}/quests/${questId}`;
   try {
     await deleteDoc(doc(db, 'users', userId, 'quests', questId));
+    return true;
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
+    console.error(`Failed to delete quest ${questId} from Firestore:`, error);
+    return false;
   }
 }
 
-export async function saveRewardToFirestore(userId: string, reward: ShopReward) {
+export async function saveRewardToFirestore(userId: string, reward: ShopReward): Promise<boolean> {
   const path = `users/${userId}/rewards/${reward.id}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'rewards', reward.id), reward, { merge: true });
+    const cleanReward = sanitizeForFirestore(reward);
+    await setDoc(doc(db, 'users', userId, 'rewards', reward.id), cleanReward, { merge: true });
+    return true;
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.error(`Failed to save reward ${reward.id} to Firestore:`, error);
+    return false;
   }
 }
 
-export async function deleteRewardFromFirestore(userId: string, rewardId: string) {
+export async function deleteRewardFromFirestore(userId: string, rewardId: string): Promise<boolean> {
   const path = `users/${userId}/rewards/${rewardId}`;
   try {
     await deleteDoc(doc(db, 'users', userId, 'rewards', rewardId));
+    return true;
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
+    console.error(`Failed to delete reward ${rewardId} from Firestore:`, error);
+    return false;
   }
 }
 
-export async function saveHistoryItemToFirestore(userId: string, item: QuestLogHistoryItem) {
+export async function saveHistoryItemToFirestore(userId: string, item: QuestLogHistoryItem): Promise<boolean> {
   const path = `users/${userId}/history/${item.id}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'history', item.id), item, { merge: true });
+    const cleanItem = sanitizeForFirestore(item);
+    await setDoc(doc(db, 'users', userId, 'history', item.id), cleanItem, { merge: true });
+    return true;
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.error(`Failed to save history item ${item.id} to Firestore:`, error);
+    return false;
   }
 }
 
@@ -239,5 +302,51 @@ export async function bootstrapUserCloudData(
   } catch (err) {
     console.error('Error bootstrapping cloud data:', err);
   }
+}
+
+export interface GrimorioBackupData {
+  version: 1;
+  appName: string;
+  exportedAt: string;
+  userEmail?: string | null;
+  profile: CharacterProfile;
+  quests: Quest[];
+  rewards: ShopReward[];
+  history: QuestLogHistoryItem[];
+}
+
+/**
+ * Downloads a complete JSON snapshot file of the user's RPG Grimório.
+ * Useful for backing up to Google Drive, iCloud, local disk, etc.
+ */
+export function exportGrimorioToJsonFile(
+  profile: CharacterProfile,
+  quests: Quest[],
+  rewards: ShopReward[],
+  history: QuestLogHistoryItem[],
+  userEmail?: string | null
+) {
+  const backupData: GrimorioBackupData = {
+    version: 1,
+    appName: 'QuestLog RPG',
+    exportedAt: new Date().toISOString(),
+    userEmail: userEmail || null,
+    profile,
+    quests,
+    rewards,
+    history,
+  };
+
+  const jsonString = JSON.stringify(backupData, null, 2);
+  const blob = new Blob([jsonString], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const dateStr = new Date().toISOString().split('T')[0];
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `grimorio_questlog_backup_${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 

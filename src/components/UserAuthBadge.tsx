@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { LogIn, LogOut, Cloud, CloudCheck, Share2, Check, User as UserIcon } from 'lucide-react';
+import { LogIn, LogOut, Cloud, Share2, Check, Download } from 'lucide-react';
 import { sound } from '../utils/audio';
 import { AuthModal } from './AuthModal';
 
-export const UserAuthBadge: React.FC = () => {
+interface Props {
+  onExportBackup?: () => void;
+}
+
+export const UserAuthBadge: React.FC<Props> = ({ onExportBackup }) => {
   const { currentUser, loadingAuth, logout } = useAuth();
   const [copiedLink, setCopiedLink] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -106,6 +110,25 @@ export const UserAuthBadge: React.FC = () => {
                 <span className="text-[10px] text-slate-400">Copiar Link</span>
               )}
             </button>
+
+            {/* Backup export button */}
+            {onExportBackup && (
+              <button
+                type="button"
+                onClick={() => {
+                  sound.playClick();
+                  setShowUserMenu(false);
+                  onExportBackup();
+                }}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-purple-900 hover:border-purple-600 bg-black/60 hover:bg-purple-950/60 text-xs text-purple-200 hover:text-white transition"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Baixar Backup JSON</span>
+                </span>
+                <span className="text-[10px] text-emerald-400 font-mono">.json</span>
+              </button>
+            )}
 
             {/* Logout button */}
             <button

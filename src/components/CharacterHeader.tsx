@@ -15,6 +15,7 @@ interface Props {
   activeTab?: TabType;
   onChangeTab?: (tab: TabType) => void;
   onOpenCreate?: () => void;
+  onExportBackup?: () => void;
   pendingCount?: number;
 }
 
@@ -26,6 +27,7 @@ export const CharacterHeader: React.FC<Props> = ({
   activeTab = 'quests',
   onChangeTab,
   onOpenCreate,
+  onExportBackup,
   pendingCount = 0,
 }) => {
   const nextXp = getRequiredXpForLevel(profile.level);
@@ -62,7 +64,7 @@ export const CharacterHeader: React.FC<Props> = ({
 
           {/* Mobile Right Quick Controls */}
           <div className="flex items-center gap-2 md:hidden">
-            <UserAuthBadge />
+            <UserAuthBadge onExportBackup={onExportBackup} />
             <PWAInstallButton />
             <button
               onClick={onToggleSound}
@@ -166,7 +168,7 @@ export const CharacterHeader: React.FC<Props> = ({
           )}
 
           <PWAInstallButton />
-          <UserAuthBadge />
+          <UserAuthBadge onExportBackup={onExportBackup} />
 
           <button
             onClick={onToggleSound}

@@ -40,6 +40,7 @@ import {
   deleteRewardFromFirestore,
   saveHistoryItemToFirestore,
   bootstrapUserCloudData,
+  exportGrimorioToJsonFile,
 } from './services/firestoreSync';
 
 export default function App() {
@@ -79,15 +80,31 @@ export default function App() {
         if (!isMounted) return;
 
         if (cloudData && (cloudData.profile || cloudData.quests.length > 0)) {
-          // Cloud data exists: populate local state from Firestore
+          // Cloud data exists: populate local state from Firestore without losing newly added local quests
           if (cloudData.profile) {
             setProfile(cloudData.profile);
             saveProfile(cloudData.profile);
           }
-          if (cloudData.quests && cloudData.quests.length > 0) {
-            setQuests(cloudData.quests);
-            saveQuests(cloudData.quests);
+
+          if (cloudData.quests) {
+            setQuests((prevLocal) => {
+              const cloudIds = new Set(cloudData.quests.map((q) => q.id));
+              // Preserve any local quest created on this device that isn't in Firestore yet
+              const pendingLocal = prevLocal.filter((lq) => !cloudIds.has(lq.id));
+
+              // Upload any pending local quests to cloud
+              if (pendingLocal.length > 0) {
+                pendingLocal.forEach((pendingQ) => {
+                  saveQuestToFirestore(currentUser.uid, pendingQ);
+                });
+              }
+
+              const merged = [...cloudData.quests, ...pendingLocal];
+              saveQuests(merged);
+              return merged;
+            });
           }
+
           if (cloudData.rewards && cloudData.rewards.length > 0) {
             setRewards(cloudData.rewards);
             saveRewards(cloudData.rewards);
@@ -98,7 +115,7 @@ export default function App() {
           }
           showNotification(
             '☁️ Grimório Sincronizado!',
-            `Conectado! Seus dados foram carregados da nuvem.`
+            `Conectado! Seus dados foram sincronizados com a nuvem.`
           );
         } else {
           // New cloud user: bootstrap their cloud document with existing local state
@@ -128,8 +145,16 @@ export default function App() {
             },
             onQuestsChange: (remoteQuests) => {
               if (isMounted) {
-                setQuests(remoteQuests);
-                saveQuests(remoteQuests);
+                setQuests((currentQuests) => {
+                  // Merge remote quests with any in-flight local quests
+                  const remoteIds = new Set(remoteQuests.map((q) => q.id));
+                  const inFlight = currentQuests.filter(
+                    (cq) => !remoteIds.has(cq.id) && Date.now() - new Date(cq.createdAt || 0).getTime() < 10000
+                  );
+                  const updated = [...remoteQuests, ...inFlight];
+                  saveQuests(updated);
+                  return updated;
+                });
               }
             },
             onRewardsChange: (remoteRewards) => {
@@ -500,23 +525,39 @@ export default function App() {
   };
 
   // Create quest
-  const handleCreateQuest = (questData: Omit<Quest, 'id' | 'createdAt' | 'completed'>) => {
+  const handleCreateQuest = async (questData: Omit<Quest, 'id' | 'createdAt' | 'completed'>) => {
     const newQuest: Quest = {
       ...questData,
       id: `quest-${Date.now()}`,
       completed: false,
       createdAt: new Date().toISOString(),
     };
-    setQuests((prev) => [newQuest, ...prev.filter((q) => q.id !== newQuest.id)]);
+    setQuests((prev) => {
+      const updated = [newQuest, ...prev.filter((q) => q.id !== newQuest.id)];
+      saveQuests(updated);
+      return updated;
+    });
+
     if (currentUser) {
-      saveQuestToFirestore(currentUser.uid, newQuest);
+      showNotification('Salvando na nuvem...', newQuest.title);
+      const ok = await saveQuestToFirestore(currentUser.uid, newQuest);
+      if (ok) {
+        showNotification('☁️ Missão salva na Nuvem!', newQuest.title);
+      } else {
+        showNotification('Salvo localmente (offline)', newQuest.title);
+      }
+    } else {
+      showNotification('Missão registrada no Grimório!', newQuest.title);
     }
-    showNotification('Missão registrada no Grimório!', newQuest.title);
   };
 
   // Delete quest
   const handleDeleteQuest = (questId: string) => {
-    setQuests(quests.filter((q) => q.id !== questId));
+    setQuests((prev) => {
+      const updated = prev.filter((q) => q.id !== questId);
+      saveQuests(updated);
+      return updated;
+    });
     if (currentUser) {
       deleteQuestFromFirestore(currentUser.uid, questId);
     }
@@ -620,23 +661,14 @@ export default function App() {
     );
   };
 
-  // Export JSON
+  // Export JSON (Grimório Backup)
   const handleExportData = () => {
-    const data = {
-      profile,
-      quests,
-      rewards,
-      history,
-      exportedAt: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `questlog-backup-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showNotification('Backup salvo com sucesso!');
+    exportGrimorioToJsonFile(profile, quests, rewards, history, currentUser?.email);
+    sound.playCoin();
+    showNotification(
+      '📦 Backup do Grimório Baixado!',
+      'Arquivo JSON salvo. Você pode armazená-lo no Google Drive ou onde quiser.'
+    );
   };
 
   // Import JSON
@@ -692,6 +724,7 @@ export default function App() {
           activeTab={activeTab}
           onChangeTab={setActiveTab}
           onOpenCreate={() => setIsCreateModalOpen(true)}
+          onExportBackup={handleExportData}
           pendingCount={pendingDailies}
         />
 
