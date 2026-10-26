@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { CharacterProfile, Quest, ShopReward } from '../types/rpg';
-import { QuestLogHistoryItem } from '../utils/storage';
+import { QuestLogHistoryItem, isPresetQuest } from '../utils/storage';
 
 /**
  * Deeply sanitizes objects before passing them to Firestore.
@@ -223,6 +223,10 @@ export async function saveProfileToFirestore(userId: string, profile: CharacterP
 }
 
 export async function saveQuestToFirestore(userId: string, quest: Quest): Promise<boolean> {
+  // Never upload unauthenticated preset/demo quests to user's personal cloud database
+  if (isPresetQuest(quest)) {
+    return false;
+  }
   const path = `users/${userId}/quests/${quest.id}`;
   try {
     const cleanQuest = sanitizeForFirestore(quest);
@@ -280,7 +284,7 @@ export async function saveHistoryItemToFirestore(userId: string, item: QuestLogH
   }
 }
 
-// Upload entire initial dataset on first user login
+// Upload entire initial dataset on first user login (strictly excluding presets)
 export async function bootstrapUserCloudData(
   userId: string,
   profile: CharacterProfile,
@@ -290,7 +294,8 @@ export async function bootstrapUserCloudData(
 ) {
   try {
     await saveProfileToFirestore(userId, profile);
-    for (const q of quests) {
+    const nonPresetQuests = quests.filter((q) => !isPresetQuest(q));
+    for (const q of nonPresetQuests) {
       await saveQuestToFirestore(userId, q);
     }
     for (const r of rewards) {

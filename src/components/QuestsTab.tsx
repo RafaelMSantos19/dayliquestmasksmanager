@@ -3,6 +3,7 @@ import { Quest, QuestCategory } from '../types/rpg';
 import { QuestCard } from './QuestCard';
 import { Plus, Search, Sparkles, CheckCheck, Trophy, RotateCcw, Calendar, Zap, Trash2, ArrowRight } from 'lucide-react';
 import { sound } from '../utils/audio';
+import { isPresetQuest } from '../utils/storage';
 
 interface Props {
   quests: Quest[];
@@ -11,6 +12,7 @@ interface Props {
   onTakeMedicationDose: (questId: string, doseId: string) => void;
   onDeleteQuest: (questId: string) => void;
   onOpenCreate: () => void;
+  onClearPresets?: () => void;
 }
 
 type FilterCategory = 'all' | QuestCategory | 'medication';
@@ -23,6 +25,7 @@ export const QuestsTab: React.FC<Props> = ({
   onTakeMedicationDose,
   onDeleteQuest,
   onOpenCreate,
+  onClearPresets,
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('active');
   const [filterCat, setFilterCat] = useState<FilterCategory>('all');
@@ -165,6 +168,26 @@ export const QuestsTab: React.FC<Props> = ({
           </span>
         )}
       </div>
+
+      {/* Preset Notice & Clean Action Banner */}
+      {onClearPresets && quests.some(isPresetQuest) && (
+        <div className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-purple-950/40 border border-purple-800/80 text-xs text-purple-200">
+          <div className="flex items-center gap-2">
+            <span className="text-base">✨</span>
+            <span className="text-[11px] leading-tight text-purple-300">
+              Missões de demonstração ativas no Grimório.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClearPresets}
+            className="shrink-0 px-2.5 py-1.5 rounded-xl bg-purple-900/80 hover:bg-rose-950/80 border border-purple-500/60 hover:border-rose-500 text-purple-200 hover:text-rose-200 text-[11px] font-semibold transition active:scale-95"
+            title="Remover todas as missões predefinidas de exemplo"
+          >
+            Remover Exemplos
+          </button>
+        </div>
+      )}
 
       {/* Quests List */}
       {filteredQuests.length === 0 ? (

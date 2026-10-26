@@ -199,6 +199,29 @@ export const INITIAL_QUESTS: Quest[] = [
   },
 ];
 
+export const PRESET_QUEST_IDS = new Set([
+  'quest-med-1',
+  'quest-1',
+  'quest-2',
+  'quest-3',
+  'quest-4',
+  'quest-5',
+]);
+
+export function isPresetQuest(quest: { id?: string; title?: string } | null | undefined): boolean {
+  if (!quest) return false;
+  if (quest.id && PRESET_QUEST_IDS.has(quest.id)) return true;
+  const presetTitles = [
+    'Elixir de Cura: Antibiótico Alquímico',
+    'Elixir da Vitalidade',
+    'Treino de Força do Guerreiro',
+    'Grimório do Saber',
+    'Fortificação do Santuário',
+    'O Chefão da Semana',
+  ];
+  return quest.title ? presetTitles.includes(quest.title) : false;
+}
+
 export const INITIAL_REWARDS: ShopReward[] = [
   {
     id: 'rew-1',

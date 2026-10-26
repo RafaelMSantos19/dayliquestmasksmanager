@@ -17,6 +17,10 @@ import {
   getRequiredXpForLevel,
   checkAndApplyDayTransition,
   QuestLogHistoryItem,
+  INITIAL_PROFILE,
+  INITIAL_QUESTS,
+  INITIAL_REWARDS,
+  isPresetQuest,
 } from './utils/storage';
 import { sound } from './utils/audio';
 import { CharacterHeader } from './components/CharacterHeader';
@@ -57,6 +61,7 @@ export default function App() {
   const [floatingToast, setFloatingToast] = useState<{ message: string; sub?: string } | null>(null);
 
   const cloudInitialLoaded = useRef(false);
+  const prevUserRef = useRef<string | null>(null);
 
   const showNotification = (message: string, sub?: string) => {
     setFloatingToast({ message, sub });
@@ -68,41 +73,54 @@ export default function App() {
   // Cloud synchronization & real-time updates when user is logged in
   useEffect(() => {
     if (!currentUser) {
+      if (prevUserRef.current) {
+        // User logged out: restore clean unauthenticated preset state
+        setProfile(INITIAL_PROFILE);
+        saveProfile(INITIAL_PROFILE);
+        setQuests(INITIAL_QUESTS);
+        saveQuests(INITIAL_QUESTS);
+        setRewards(INITIAL_REWARDS);
+        saveRewards(INITIAL_REWARDS);
+        setHistory([]);
+        saveHistory([]);
+        prevUserRef.current = null;
+      }
       cloudInitialLoaded.current = false;
       return;
     }
 
+    prevUserRef.current = currentUser.uid;
     let isMounted = true;
     let unsubscribeSync: (() => void) | null = null;
+
+    // During login: clear local quests immediately to prevent preset quests from polluting the cloud
+    setQuests([]);
+    saveQuests([]);
 
     fetchUserDataFromFirestore(currentUser.uid)
       .then(async (cloudData) => {
         if (!isMounted) return;
 
         if (cloudData && (cloudData.profile || cloudData.quests.length > 0)) {
-          // Cloud data exists: populate local state from Firestore without losing newly added local quests
+          // Cloud data exists: populate local state strictly from Firestore
           if (cloudData.profile) {
             setProfile(cloudData.profile);
             saveProfile(cloudData.profile);
           }
 
           if (cloudData.quests) {
-            setQuests((prevLocal) => {
-              const cloudIds = new Set(cloudData.quests.map((q) => q.id));
-              // Preserve any local quest created on this device that isn't in Firestore yet
-              const pendingLocal = prevLocal.filter((lq) => !cloudIds.has(lq.id));
+            // Delete any preset quests that may have been accidentally saved in prior sessions
+            const pollutedPresets = cloudData.quests.filter(isPresetQuest);
+            if (pollutedPresets.length > 0) {
+              pollutedPresets.forEach((p) => {
+                deleteQuestFromFirestore(currentUser.uid, p.id);
+              });
+            }
 
-              // Upload any pending local quests to cloud
-              if (pendingLocal.length > 0) {
-                pendingLocal.forEach((pendingQ) => {
-                  saveQuestToFirestore(currentUser.uid, pendingQ);
-                });
-              }
-
-              const merged = [...cloudData.quests, ...pendingLocal];
-              saveQuests(merged);
-              return merged;
-            });
+            // Load exclusively user's own quests from the cloud
+            const cleanRemoteQuests = cloudData.quests.filter((q) => !isPresetQuest(q));
+            setQuests(cleanRemoteQuests);
+            saveQuests(cleanRemoteQuests);
           }
 
           if (cloudData.rewards && cloudData.rewards.length > 0) {
@@ -118,7 +136,7 @@ export default function App() {
             `Conectado! Seus dados foram sincronizados com a nuvem.`
           );
         } else {
-          // New cloud user: bootstrap their cloud document with existing local state
+          // New cloud user: bootstrap their cloud document with zero preset quests
           const personalizedProfile: CharacterProfile = {
             ...profile,
             name: profile.name === 'Aventureiro' && currentUser.displayName
@@ -126,7 +144,9 @@ export default function App() {
               : profile.name,
           };
           setProfile(personalizedProfile);
-          await bootstrapUserCloudData(currentUser.uid, personalizedProfile, quests, rewards, history);
+          setQuests([]);
+          saveQuests([]);
+          await bootstrapUserCloudData(currentUser.uid, personalizedProfile, [], rewards, history);
           showNotification(
             '⚔️ Progresso Salvo na Nuvem!',
             'Seu herói agora está conectado à sua conta Google e acessível em qualquer dispositivo.'
@@ -145,13 +165,16 @@ export default function App() {
             },
             onQuestsChange: (remoteQuests) => {
               if (isMounted) {
+                const cleanRemote = remoteQuests.filter((q) => !isPresetQuest(q));
                 setQuests((currentQuests) => {
-                  // Merge remote quests with any in-flight local quests
-                  const remoteIds = new Set(remoteQuests.map((q) => q.id));
+                  const remoteIds = new Set(cleanRemote.map((q) => q.id));
                   const inFlight = currentQuests.filter(
-                    (cq) => !remoteIds.has(cq.id) && Date.now() - new Date(cq.createdAt || 0).getTime() < 10000
+                    (cq) =>
+                      !isPresetQuest(cq) &&
+                      !remoteIds.has(cq.id) &&
+                      Date.now() - new Date(cq.createdAt || 0).getTime() < 10000
                   );
-                  const updated = [...remoteQuests, ...inFlight];
+                  const updated = [...cleanRemote, ...inFlight];
                   saveQuests(updated);
                   return updated;
                 });
@@ -709,6 +732,20 @@ export default function App() {
     });
   };
 
+  const handleClearPresets = async () => {
+    sound.playClick();
+    const clean = quests.filter((q) => !isPresetQuest(q));
+    const presetsToRemove = quests.filter(isPresetQuest);
+    setQuests(clean);
+    saveQuests(clean);
+    if (currentUser) {
+      for (const p of presetsToRemove) {
+        await deleteQuestFromFirestore(currentUser.uid, p.id);
+      }
+    }
+    showNotification('🧹 Missões de Exemplo Removidas', 'Apenas suas missões reais foram mantidas no Grimório.');
+  };
+
   const pendingDailies = quests.filter((q) => q.category === 'daily' && !q.completed).length;
 
   return (
@@ -738,6 +775,7 @@ export default function App() {
               onTakeMedicationDose={handleTakeMedicationDose}
               onDeleteQuest={handleDeleteQuest}
               onOpenCreate={() => setIsCreateModalOpen(true)}
+              onClearPresets={handleClearPresets}
             />
           )}
 
